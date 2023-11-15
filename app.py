@@ -9,6 +9,7 @@ from sklearn.dummy import DummyClassifier
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
 from datetime import timedelta
+import pickle
 
 data = pd.read_csv("data/data_raw.csv", index_col=0)
 
@@ -73,9 +74,7 @@ def get_data(existing_data, api_key):
 
 # Utilisation de la fonction
 data = get_data(data, api_key)
-#data.drop(['conversionSymbol', 'conversionType'], axis=1, inplace=True)
-print(data)
-
+data.drop(['conversionSymbol', 'conversionType'], axis=1, inplace=True)
 
 
 def calculate_progression(data):
@@ -118,7 +117,6 @@ def calculate_macd(btc_data):
       # Calcul du MACD
       btc_data['macd'] = btc_data['ema_12'] - btc_data['ema_26']
 
-
 def calculate_rsi(btc_data):
       # Calcul du RSI 
 
@@ -157,7 +155,6 @@ def calculate_rel_volume(btc_data):
 
       # Supprimer la colonne de volume moyen intermédiaire si désiré
       btc_data.drop(columns=['avg_volume'], inplace=True)
-
 
 def calculate_obv(btc_data):
       # Calcul de l'OBV (On-Balance Volume)
@@ -234,7 +231,6 @@ def calculate_momentum(btc_data):
       # Calcul du Momentum
       btc_data['momentum'] = btc_data['open'] - btc_data['open'].shift(n_days)
 
-
 def calculate_features(data):
       calculate_ema(data)
       calculate_macd(data)
@@ -248,9 +244,44 @@ def calculate_features(data):
 
 calculate_features(data)
 
+start_date = pd.to_datetime("2011-01-01")
+data = data[data.index >= start_date]
 
-print(data)
+"""print(data)
 print("valeurs nulles : " , data.isna().sum())
 duplicates = data.index.duplicated(keep=False)
 print("doublons : ", data[duplicates])
-print(data.loc[data['volumefrom']==0])
+print(data.loc[data['volumefrom']==0])"""
+
+
+xgboost = pickle.load(open("models/xgboost_model.pkl", 'rb'))
+
+# Sélectionner les caractéristiques et exclure la dernière ligne
+features = data.drop(columns=['progression tomorrow', 'target', 'close', 'high', 'low', 'volumefrom']).iloc[:-1, :]
+target = data['target'].iloc[:-1]
+window_size = 1500
+
+def predict_with_model(model, features, window_size):
+    # Assurez-vous que les features sont dans le bon format
+    features = pd.DataFrame(features)
+
+    # Vérifiez si le DataFrame a suffisamment de lignes
+    if len(features) < window_size:
+        raise ValueError("Le DataFrame features n'a pas assez de lignes par rapport à window_size")
+
+    # Préparer les données de test pour le dernier segment
+    X_test = features.iloc[-window_size:, :]
+
+    # Normaliser les données
+    scaler = StandardScaler()
+    X_test = scaler.fit_transform(X_test)
+
+    # Obtenir les probabilités prédites pour la classe positive (par exemple, 1)
+    prediction_prob = model.predict_proba(X_test)[:, 1]
+
+    # Retourner la probabilité prédite pour le dernier jour
+    return prediction_prob[-1]
+
+predicted_probabilities = predict_with_model(xgboost, features, window_size)
+
+print(predicted_probabilities)
