@@ -8,14 +8,14 @@ import time
 from sklearn.dummy import DummyClassifier
 from xgboost import XGBClassifier
 from sklearn.preprocessing import StandardScaler
-from datetime import timedelta
+from datetime import timedelta, datetime
 import pickle
 
 data = pd.read_csv("data/data_raw.csv", index_col=0)
 
 # Votre clé API
 #api_key = input("Please enter your CryptoCompare API key: ")
-api_key = "d1a8b449f14d5e82bd0ea52d5cb86e9171d99f9c0269a9c6eba892868094abee"
+api_key = ""
 
 
 
@@ -90,9 +90,6 @@ def calculate_progression(data):
 
       # Créer une variable cible binaire : 1 si la progression demain est positive, 0 sinon
       data['target'] = np.where(data['progression tomorrow'] > 0, 1, 0)
-
-calculate_progression(data)
-
 
 def calculate_ema(btc_data):
       #Calcul EMA 26
@@ -232,6 +229,7 @@ def calculate_momentum(btc_data):
       btc_data['momentum'] = btc_data['open'] - btc_data['open'].shift(n_days)
 
 def calculate_features(data):
+      calculate_progression(data)
       calculate_ema(data)
       calculate_macd(data)
       calculate_rsi(data)
@@ -262,26 +260,89 @@ target = data['target'].iloc[:-1]
 window_size = 1500
 
 def predict_with_model(model, features, window_size):
-    # Assurez-vous que les features sont dans le bon format
-    features = pd.DataFrame(features)
+      # S'assurer que les features sont dans le bon format
+      features = pd.DataFrame(features)
 
-    # Vérifiez si le DataFrame a suffisamment de lignes
-    if len(features) < window_size:
-        raise ValueError("Le DataFrame features n'a pas assez de lignes par rapport à window_size")
+      # Vérifier si le DataFrame a suffisamment de lignes
+      if len(features) < window_size:
+            raise ValueError("Le DataFrame features n'a pas assez de lignes par rapport à window_size")
 
-    # Préparer les données de test pour le dernier segment
-    X_test = features.iloc[-window_size:, :]
+      # Préparer les données de test pour le dernier segment
+      X_test = features.iloc[-window_size:, :]
 
-    # Normaliser les données
-    scaler = StandardScaler()
-    X_test = scaler.fit_transform(X_test)
+      # Normaliser les données
+      scaler = StandardScaler()
+      X_test = scaler.fit_transform(X_test)
 
-    # Obtenir les probabilités prédites pour la classe positive (par exemple, 1)
-    prediction_prob = model.predict_proba(X_test)[:, 1]
+      # Obtenir les probabilités prédites pour la classe positive 
+      prediction_prob = model.predict_proba(X_test)[:, 1]
 
-    # Retourner la probabilité prédite pour le dernier jour
-    return prediction_prob[-1]
+      # Retourner la probabilité prédite pour le dernier jour
+      return prediction_prob[-1]
 
 predicted_probabilities = predict_with_model(xgboost, features, window_size)
+#print (predicted_probabilities)
 
-print(predicted_probabilities)
+
+wallet_baseline = [1000, 0]
+wallet_test = [1000, 0]
+total = sum(wallet_test)
+
+wallet_test[0] = (total * predicted_probabilities)
+wallet_test[1] = total - wallet_test[0]
+
+wallet_test[0] *= (data['progression tomorrow'].iloc[-1]+1)
+
+
+
+
+def get_past_dates(n):
+    # Liste pour stocker les dates
+    past_dates = []
+
+    # Obtenir la date d'hier
+    yesterday = datetime.now() - timedelta(days=15)
+
+    # Boucle pour obtenir les dates de "hier à il y a n jours"
+    for i in range(n-1, 0, -1):
+        # Calcul de la date
+        date = yesterday - timedelta(days=i)
+
+        # Formatage de la date en 'année-mois-jour'
+        formatted_date = date.strftime('%Y-%m-%d')
+
+        # Ajouter la date formatée à la liste
+        past_dates.append(formatted_date)
+
+    # Ajouter hier à la liste
+    past_dates.append(yesterday.strftime('%Y-%m-%d'))
+
+    return past_dates
+
+n_days = 7
+dates = get_past_dates(n_days)
+print(dates)
+
+xgb_models = {}
+predictions = {}
+
+for date in dates:
+      file_path = f"models/xgboost_models/xgboost_{date}.pkl"
+      with open(file_path, 'rb') as file:
+            xgb_models[date] = pickle.load(file)
+
+
+      # Filtrer 'data' pour ne garder que les données jusqu'à la date concernée
+      filtered_data = data[data.index <= date]  
+      
+      # Préparer les features pour la date filtrée
+      features = filtered_data.drop(columns=['progression tomorrow', 'target', 'close', 'high', 'low', 'volumefrom']).iloc[:-1, :]
+     
+      # Faire la prédiction avec le modèle chargé     
+      prediction = predict_with_model(xgb_models[date], features, window_size)
+      
+      # Stocker la prédiction
+      predictions[date] = prediction
+
+      
+print(predictions)
