@@ -15,7 +15,7 @@ data = pd.read_csv("data/data_raw.csv", index_col=0)
 
 # Votre clé API
 #api_key = input("Please enter your CryptoCompare API key: ")
-api_key = ""
+api_key = "d1a8b449f14d5e82bd0ea52d5cb86e9171d99f9c0269a9c6eba892868094abee"
 
 
 
