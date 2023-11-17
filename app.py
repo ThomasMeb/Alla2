@@ -259,7 +259,7 @@ features = data.drop(columns=['progression tomorrow', 'target', 'close', 'high',
 target = data['target'].iloc[:-1]
 window_size = 1500
 
-def predict_with_model(model, features, window_size):
+def predict_with_model(model, scaler, features, window_size):
       # S'assurer que les features sont dans le bon format
       features = pd.DataFrame(features)
 
@@ -280,18 +280,18 @@ def predict_with_model(model, features, window_size):
       # Retourner la probabilité prédite pour le dernier jour
       return prediction_prob[-1]
 
-predicted_probabilities = predict_with_model(xgboost, features, window_size)
+#predicted_probabilities = predict_with_model(xgboost, features, window_size)
 #print (predicted_probabilities)
 
 
-wallet_baseline = [1000, 0]
+"""wallet_baseline = [1000, 0]
 wallet_test = [1000, 0]
 total = sum(wallet_test)
 
 wallet_test[0] = (total * predicted_probabilities)
 wallet_test[1] = total - wallet_test[0]
 
-wallet_test[0] *= (data['progression tomorrow'].iloc[-1]+1)
+wallet_test[0] *= (data['progression tomorrow'].iloc[-1]+1)"""
 
 
 
@@ -319,30 +319,54 @@ def get_past_dates(n):
 
     return past_dates
 
-n_days = 7
+n_days = 31
 dates = get_past_dates(n_days)
 print(dates)
 
 xgb_models = {}
+xgb_scalers = {}
 predictions = {}
+wallet_baseline = [1000, 0]
+wallet_test = [1000, 0]
+ratio = 0
 
 for date in dates:
-      file_path = f"models/xgboost_models/xgboost_{date}.pkl"
-      with open(file_path, 'rb') as file:
+      model_filename = f"models/xgboost_models/xgboost_{date}.pkl"
+      with open(model_filename, 'rb') as file:
             xgb_models[date] = pickle.load(file)
-
+      scaler_filename = f"scalers/scaler_{date}.pkl"
+      with open(scaler_filename, 'rb') as file:
+            xgb_scalers[date] = pickle.load(file)
+      #print(model_filename)
 
       # Filtrer 'data' pour ne garder que les données jusqu'à la date concernée
-      filtered_data = data[data.index <= date]  
-      
+      filtered_data = data[data.index <= date]
+      #print(filtered_data[-1:]["progression tomorrow"])  
+
       # Préparer les features pour la date filtrée
       features = filtered_data.drop(columns=['progression tomorrow', 'target', 'close', 'high', 'low', 'volumefrom']).iloc[:-1, :]
-     
+
       # Faire la prédiction avec le modèle chargé     
-      prediction = predict_with_model(xgb_models[date], features, window_size)
-      
+      prediction = predict_with_model(xgb_models[date], xgb_scalers[date], features, window_size)
+      #print(prediction)
+
+      progression = filtered_data["progression tomorrow"].iloc[-1]+1
+
+      total = sum(wallet_test)
+      wallet_test[0] = (total * prediction)
+      wallet_test[1] = total - wallet_test[0]
+      wallet_test[0] *= (progression)
+      wallet_baseline[0] *= (progression)
+      total = sum(wallet_test)
+
+      if (prediction < 0.5 and progression<1) or (prediction>0.5 and progression>1):
+            ratio+=1
+      else:
+            ratio-=1
+
+      print(f'date : {date}, predi : {prediction.round(2)}, prog : {100*(progression-1).round(5)}%, base : {wallet_baseline}, test : {wallet_test}, total : {total.round(2)}, ratio : {ratio}')
       # Stocker la prédiction
       predictions[date] = prediction
 
       
-print(predictions)
+#print(predictions)
