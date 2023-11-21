@@ -70,11 +70,12 @@ def get_data(existing_data, api_key):
       # Triez le DataFrame combiné par index (date)
       existing_data.sort_index(inplace=True)
 
+      existing_data.drop(['conversionSymbol', 'conversionType'], axis=1, inplace=True)
+
       return existing_data
 
 # Utilisation de la fonction
 data = get_data(data, api_key)
-data.drop(['conversionSymbol', 'conversionType'], axis=1, inplace=True)
 
 
 def calculate_progression(data):
