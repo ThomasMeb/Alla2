@@ -302,7 +302,7 @@ def get_past_dates(n):
     past_dates = []
 
     # Obtenir la date d'hier
-    yesterday = datetime.now() - timedelta(days=15)
+    yesterday = datetime.now() - timedelta(days=365)
 
     # Boucle pour obtenir les dates de "hier à il y a n jours"
     for i in range(n-1, 0, -1):
